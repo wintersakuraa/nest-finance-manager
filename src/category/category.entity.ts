@@ -1,20 +1,31 @@
-import { Column, CreateDateColumn, Entity, OneToMany, PrimaryGeneratedColumn } from 'typeorm';
-import { BankEntity } from '../bank/bank.entity';
+import { Column, CreateDateColumn, Entity, JoinTable, ManyToMany, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
+import { Transaction } from '../transaction/transaction.entity';
+import { ApiProperty } from '@nestjs/swagger';
+import { User } from '../user/user.entity';
 
-@Entity('transaction')
-export class TransactionEntity {
+@Entity('category')
+export class Category {
+    @ApiProperty({ description: 'Category id', type: Number, example: 1 })
     @PrimaryGeneratedColumn()
     id: number;
 
+    @ApiProperty({ description: 'Category name', type: String, example: 'food' })
     @Column({ unique: true })
-    email: string;
+    name: string;
 
-    @Column({ select: false })
-    password: string;
-
-    @CreateDateColumn()
+    @ApiProperty({ description: 'Category creation date', type: Date, example: '2023-02-23' })
+    @CreateDateColumn({ type: 'date' })
     createdAt: Date;
 
-    @OneToMany(() => BankEntity, (bank) => bank.user)
-    banks: BankEntity[];
+    @ApiProperty({
+        description: 'Category creator',
+        type: () => User,
+        example: { id: 1, email: 'newUser@gmail.com', createdAt: '2023-02-23' },
+    })
+    @ManyToOne(() => User, (user) => user.categories)
+    user: User;
+
+    @ManyToMany(() => Transaction, (transaction) => transaction.categories, { onDelete: 'RESTRICT' })
+    @JoinTable({ name: 'category_transaction' })
+    transactions: Transaction[];
 }

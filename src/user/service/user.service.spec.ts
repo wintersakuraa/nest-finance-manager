@@ -1,193 +1,133 @@
-import { DataSource, DeepPartial } from 'typeorm';
-import { UpdateResult } from 'typeorm/query-builder/result/UpdateResult';
 import { Test, TestingModule } from '@nestjs/testing';
+import { UserService } from './user.service';
+import { DeepPartial } from 'typeorm';
+import { User } from '../user.entity';
+import { UpdateResult } from 'typeorm/query-builder/result/UpdateResult';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { User } from '../../user/user.entity';
-import { TransactionService } from './transaction.service';
-import { Transaction } from '../transaction.entity';
-import { QueryDto, TransactionDto } from '../dto';
-import { BankService } from '../../bank/service/bank.service';
-import { CategoryService } from '../../category/service/category.service';
-import { UserService } from '../../user/service/user.service';
-import { Category } from '../../category/category.entity';
-import { Bank } from '../../bank/bank.entity';
-import { TransactionNotFoundException } from '../exception';
+import { CreateUserDto, UpdateUserDto } from '../dto';
+import { UserNotFoundException } from '../exception';
 
-describe('TransactionService', () => {
-    let transactionService: TransactionService;
+describe('UserService', () => {
+    let userService: UserService;
 
-    const mockTransactionRepository = {
-        create: jest.fn().mockImplementation((transaction: DeepPartial<Transaction>) => new Transaction()),
-        save: jest.fn().mockImplementation((transaction: Transaction) => Promise.resolve(transaction)),
-        remove: jest.fn().mockImplementation((transaction: Transaction) => Promise.resolve(transaction)),
+    const mockUserRepository = {
+        create: jest.fn().mockImplementation((user: DeepPartial<User>) => new User()),
+        save: jest.fn().mockImplementation((user: User) => Promise.resolve(user)),
+        remove: jest.fn().mockImplementation((user: User) => Promise.resolve(user)),
         update: jest.fn().mockReturnValue((criteria, partialEntity) => Promise.resolve(UpdateResult)),
         find: jest.fn(),
         findOne: jest.fn(),
     };
 
-    const getCategoryById = jest
-        .fn()
-        .mockImplementation((user: User, categoryId: number) => Promise.resolve({} as Category));
-
-    const getUserById = jest.fn().mockImplementation((userId: number) => Promise.resolve({} as User));
-
-    const getBankById = jest
-        .fn()
-        .mockImplementation((user: User, bankId: number) => Promise.resolve({ balance: 0 } as Bank));
-
-    const createQueryRunner = jest.fn().mockImplementation(() => ({
-        connect: jest.fn(),
-        startTransaction: jest.fn(),
-        release: jest.fn(),
-        commitTransaction: jest.fn(),
-        rollbackTransaction: jest.fn(),
-        manager: {
-            save: jest.fn(),
-            update: jest.fn(),
-        },
-    }));
-
     beforeEach(async () => {
         const module: TestingModule = await Test.createTestingModule({
             providers: [
-                TransactionService,
+                UserService,
                 {
-                    provide: getRepositoryToken(Transaction),
-                    useValue: mockTransactionRepository,
-                },
-                {
-                    provide: BankService,
-                    useValue: {
-                        getBankById,
-                    },
-                },
-                {
-                    provide: CategoryService,
-                    useValue: {
-                        getCategoryById,
-                    },
-                },
-                {
-                    provide: UserService,
-                    useValue: {
-                        getUserById,
-                    },
-                },
-                {
-                    provide: DataSource,
-                    useValue: {
-                        createQueryRunner,
-                    },
+                    provide: getRepositoryToken(User),
+                    useValue: mockUserRepository,
                 },
             ],
         }).compile();
 
-        transactionService = module.get<TransactionService>(TransactionService);
+        userService = module.get<UserService>(UserService);
     });
 
     it('should be defined', () => {
-        expect(transactionService).toBeDefined();
+        expect(userService).toBeDefined();
     });
 
-    describe('create transaction', () => {
-        const transactionDto: TransactionDto = {
-            amount: 1,
-            type: 1,
-            bankId: 1,
-            userId: 1,
-            categoryIds: [1, 2],
+    describe('create user', () => {
+        const userDto: CreateUserDto = {
+            email: 'wintersakura@gmail.com',
+            password: '123456',
         };
 
-        it('should call manager.update and manager.save', async () => {
-            await transactionService.createTransaction(transactionDto);
-
-            expect(getUserById).toHaveBeenCalledWith(transactionDto.userId);
-            expect(getUserById).toHaveReturnedWith(Promise.resolve({} as User));
-
-            expect(getCategoryById).toHaveBeenCalled();
-            expect(getCategoryById).toHaveReturnedWith(Promise.resolve({} as Category));
-
-            expect(getBankById).toHaveBeenCalled();
-            expect(getBankById).toHaveReturnedWith(Promise.resolve({ balance: 0 } as Bank));
-
-            expect(createQueryRunner).toHaveBeenCalled();
-
-            expect(mockTransactionRepository.create).toHaveBeenCalled();
+        it('should return new user', async () => {
+            await expect(userService.createUser(userDto)).resolves.toEqual({ ...userDto } as User);
+            expect(mockUserRepository.save).toHaveBeenCalledWith({ ...userDto });
         });
     });
 
-    describe('get all transaction', () => {
-        const user = {} as User;
-        const bankId = 1;
+    describe('update user', () => {
+        const userId = 1;
+        const userDto: UpdateUserDto = {
+            email: 'wintersakura@gmail.com',
+        };
 
-        describe('when no query provided', () => {
-            const query: QueryDto = {
-                skip: 0,
-                take: 0,
-            };
-
+        describe('when user exists', () => {
             beforeEach(() => {
-                mockTransactionRepository.find.mockReturnValue(Promise.resolve([] as Transaction[]));
+                mockUserRepository.findOne.mockReturnValue(Promise.resolve({} as User));
             });
 
-            it('should return transactions array', async () => {
-                await expect(transactionService.getAllTransactions(user, bankId, query)).resolves.toEqual(
-                    [] as Transaction[],
-                );
-                expect(mockTransactionRepository.find).toHaveBeenCalled();
+            it('should return user', async () => {
+                await expect(userService.updateUser(userId, userDto)).resolves.toEqual({} as User);
+                expect(mockUserRepository.update).toHaveBeenCalledWith(userId, userDto);
+                expect(mockUserRepository.findOne).toHaveBeenCalled();
             });
         });
 
-        describe('when no query provided', () => {
-            const query: QueryDto = {
-                skip: 0,
-                take: 2,
-            };
-
+        describe('when user does not exist', () => {
             beforeEach(() => {
-                mockTransactionRepository.find.mockReturnValue(
-                    Promise.resolve([{} as Transaction, {} as Transaction] as Transaction[]),
-                );
+                mockUserRepository.findOne.mockReturnValue(Promise.resolve(null));
             });
 
-            it('should return transactions array with 2 values', async () => {
-                await expect(transactionService.getAllTransactions(user, bankId, query)).resolves.toEqual([
-                    {} as Transaction,
-                    {} as Transaction,
-                ] as Transaction[]);
-                expect(mockTransactionRepository.find).toHaveBeenCalled();
+            it('should throw UserNotFoundException', async () => {
+                await expect(userService.updateUser(userId, userDto)).rejects.toThrow(UserNotFoundException);
+                expect(mockUserRepository.update).toHaveBeenCalledWith(userId, userDto);
+                expect(mockUserRepository.findOne).toHaveBeenCalled();
             });
         });
     });
 
-    describe('delete transaction', () => {
-        const user = {} as User;
-        const transactionId = 1;
+    describe('get user by id', () => {
+        const userId = 1;
 
-        describe('when transaction exists', () => {
+        describe('when user exists', () => {
             beforeEach(() => {
-                mockTransactionRepository.findOne.mockReturnValue(Promise.resolve({} as Transaction));
+                mockUserRepository.findOne.mockReturnValue(Promise.resolve({} as User));
             });
 
-            it('should call remove', async () => {
-                await transactionService.deleteTransaction(user, transactionId);
-                expect(mockTransactionRepository.findOne).toHaveBeenCalled();
-                expect(mockTransactionRepository.remove).toHaveBeenCalledWith({} as Transaction);
-                expect(mockTransactionRepository.remove).toHaveReturnedWith(Promise.resolve(Transaction));
+            it('should return user', async () => {
+                await expect(userService.getUserById(userId)).resolves.toEqual({} as User);
+                expect(mockUserRepository.findOne).toHaveBeenCalled();
             });
         });
 
-        describe('when transaction does not exist', () => {
+        describe('when user does not exist', () => {
             beforeEach(() => {
-                mockTransactionRepository.findOne.mockReturnValue(Promise.resolve(null));
+                mockUserRepository.findOne.mockReturnValue(Promise.resolve(null));
             });
 
-            it('should throw TransactionNotFoundException', async () => {
-                await expect(transactionService.deleteTransaction(user, transactionId)).rejects.toThrow(
-                    TransactionNotFoundException,
-                );
-                expect(mockTransactionRepository.findOne).toHaveBeenCalled();
-                expect(mockTransactionRepository.remove).toHaveBeenCalledWith(null);
+            it('should throw UserNotFoundException', async () => {
+                await expect(userService.getUserById(userId)).rejects.toThrow(UserNotFoundException);
+                expect(mockUserRepository.findOne).toHaveBeenCalled();
+            });
+        });
+    });
+
+    describe('get user by email', () => {
+        const email = 'wintersakura@gmail.com';
+
+        describe('when user exists', () => {
+            beforeEach(() => {
+                mockUserRepository.findOne.mockReturnValue(Promise.resolve({} as User));
+            });
+
+            it('should return user', async () => {
+                await expect(userService.getUserByEmail(email)).resolves.toEqual({} as User);
+                expect(mockUserRepository.findOne).toHaveBeenCalled();
+            });
+        });
+
+        describe('when user does not exist', () => {
+            beforeEach(() => {
+                mockUserRepository.findOne.mockReturnValue(Promise.resolve(null));
+            });
+
+            it('should return null', async () => {
+                await expect(userService.getUserByEmail(email)).resolves.toEqual(null);
+                expect(mockUserRepository.findOne).toHaveBeenCalled();
             });
         });
     });

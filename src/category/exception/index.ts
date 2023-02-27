@@ -1,1 +1,1 @@
-export * from './bank-not-found.exception';
+export * from './category-not-found.exception';

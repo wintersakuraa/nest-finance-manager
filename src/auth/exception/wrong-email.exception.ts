@@ -1,7 +1,7 @@
-import { UnauthorizedException } from '@nestjs/common';
+import { BadRequestException } from '@nestjs/common';
 
-export class WrongPasswordException extends UnauthorizedException {
+export class WrongEmailException extends BadRequestException {
     constructor() {
-        super('Password does not match');
+        super('User with such email not found');
     }
 }

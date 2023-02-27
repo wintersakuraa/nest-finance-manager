@@ -1,18 +1,50 @@
-import { Body, Controller, Post } from '@nestjs/common';
-import { AuthService } from './auth.service';
-import { CreateUserDto } from '../user/dto';
+import { Body, Controller, Get, HttpCode, HttpStatus, Post, UseGuards } from '@nestjs/common';
+import { AuthService } from '../service/auth.service';
+import { CreateUserDto } from '../../user/dto';
+import {
+    ApiBadRequestResponse,
+    ApiCreatedResponse,
+    ApiOkResponse,
+    ApiOperation,
+    ApiTags,
+    ApiUnauthorizedResponse,
+} from '@nestjs/swagger';
+import { AuthResponse } from '../auth.response';
+import { User } from '../../user/user.entity';
+import { RefreshTokenGuard } from '../guard';
+import { ReqUser } from '../../common/decorator';
 
-@Controller('auth')
+@ApiTags('auth')
+@Controller()
 export class AuthController {
-    constructor(private authService: AuthService) {}
+    constructor(private readonly authService: AuthService) {}
 
+    @ApiOperation({ summary: 'Register User' })
+    @ApiCreatedResponse({
+        description: 'Access and refresh tokens as a response',
+        type: AuthResponse,
+    })
+    @ApiBadRequestResponse({ description: 'User cannot register' })
     @Post('register')
-    register(@Body() userDto: CreateUserDto) {
+    async register(@Body() userDto: CreateUserDto): Promise<AuthResponse> {
         return this.authService.register(userDto);
     }
 
+    @ApiOperation({ summary: 'Login User' })
+    @ApiOkResponse({ description: 'Access and refresh tokens as a response', type: AuthResponse })
+    @ApiUnauthorizedResponse({ description: 'User cannot login' })
+    @HttpCode(HttpStatus.OK)
     @Post('login')
-    login(@Body() userDto: CreateUserDto) {
+    async login(@Body() userDto: CreateUserDto): Promise<AuthResponse> {
         return this.authService.login(userDto);
+    }
+
+    @ApiOperation({ summary: "Refresh User's Token" })
+    @ApiOkResponse({ description: 'Access and refresh tokens as a response', type: AuthResponse })
+    @ApiUnauthorizedResponse({ description: 'Invalid refresh token' })
+    @UseGuards(RefreshTokenGuard)
+    @Get('refresh')
+    refreshTokens(@ReqUser() user: User): Promise<AuthResponse> {
+        return this.authService.refreshTokens(user.id, user.refreshToken);
     }
 }

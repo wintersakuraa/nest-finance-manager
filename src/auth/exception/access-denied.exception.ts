@@ -1,7 +1,7 @@
-import { BadRequestException } from '@nestjs/common';
+import { ForbiddenException } from '@nestjs/common';
 
-export class UserAlreadyExistsException extends BadRequestException {
+export class AccessDeniedException extends ForbiddenException {
     constructor() {
-        super('User with such email already exists');
+        super('Access Denied');
     }
 }

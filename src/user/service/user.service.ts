@@ -1,29 +1,53 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { UserEntity } from './user.entity';
+import { User } from '../user.entity';
 import { Repository } from 'typeorm';
-import { CreateUserDto } from './dto';
+import { CreateUserDto, UpdateUserDto } from '../dto';
+import { UserNotFoundException } from '../exception';
 
 @Injectable()
 export class UserService {
-    constructor(
-        @InjectRepository(UserEntity)
-        private readonly userRepository: Repository<UserEntity>,
-    ) {}
+    constructor(@InjectRepository(User) private readonly userRepository: Repository<User>) {}
 
-    async createUser(userDto: CreateUserDto): Promise<UserEntity> {
+    async createUser(userDto: CreateUserDto): Promise<User> {
         return await this.userRepository.save({ ...userDto });
     }
 
-    async findUsers(): Promise<UserEntity[]> {
-        return await this.userRepository.find();
+    async updateUser(id: number, userDto: UpdateUserDto): Promise<User> {
+        await this.userRepository.update(id, userDto);
+
+        const user = await this.userRepository.findOne({
+            where: { id },
+        });
+        if (!user) {
+            throw new UserNotFoundException();
+        }
+
+        return user;
     }
 
-    async findById(id: number): Promise<UserEntity> {
-        return await this.userRepository.findOneBy({ id });
+    async getUserById(id: number): Promise<User> {
+        const user = await this.userRepository.findOne({
+            where: { id },
+        });
+        if (!user) {
+            throw new UserNotFoundException();
+        }
+
+        return user;
     }
 
-    async findByEmail(email: string): Promise<UserEntity> {
-        return await this.userRepository.findOneBy({ email });
+    async getUserByEmail(email: string): Promise<User> {
+        return await this.userRepository.findOne({
+            where: { email },
+            select: {
+                id: true,
+                email: true,
+                password: true,
+                banks: true,
+                createdAt: true,
+                refreshToken: true,
+            },
+        });
     }
 }

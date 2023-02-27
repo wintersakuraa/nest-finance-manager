@@ -1,228 +1,237 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { AuthService } from './auth.service';
-import { UserService } from '../../user/service/user.service';
-import { JwtService } from '@nestjs/jwt';
-import { ConfigService } from '@nestjs/config';
-import { CreateUserDto } from '../../user/dto';
-import { UserAlreadyExistsException, WrongEmailException, WrongPasswordException } from '../exception';
-import * as argon from 'argon2';
-import { AccessDeniedException } from '../exception/access-denied.exception';
+import { BankService } from './bank.service';
+import { getRepositoryToken } from '@nestjs/typeorm';
+import { Bank } from '../bank.entity';
+import { DeepPartial } from 'typeorm';
+import { User } from '../../user/user.entity';
+import { BankDto, BankStatisticsDto } from '../dto';
+import { CategoryService } from '../../category/service/category.service';
+import { BankNotFoundException } from '../exception';
+import { UpdateResult } from 'typeorm/query-builder/result/UpdateResult';
+import { Category } from '../../category/category.entity';
+import { Transaction, TransactionType } from '../../transaction/transaction.entity';
 
-describe('AuthService', () => {
-    let authService: AuthService;
+describe('BankService', () => {
+    let bankService: BankService;
 
-    const createUser = jest.fn().mockImplementation((userDto: CreateUserDto) => Promise.resolve(userDto));
-    let updateUser: jest.Mock;
-    let getUserByEmail: jest.Mock;
-    let getUserById: jest.Mock;
+    const mockBankRepository = {
+        create: jest.fn().mockImplementation((bank: DeepPartial<Bank>) => new Bank()),
+        save: jest.fn().mockImplementation((bank: Bank) => Promise.resolve(bank)),
+        remove: jest.fn().mockImplementation((bank: Bank) => Promise.resolve(bank)),
+        update: jest.fn().mockReturnValue((criteria, partialEntity) => Promise.resolve(UpdateResult)),
+        find: jest.fn(),
+        findOne: jest.fn(),
+    };
+
+    // mock for category service
+    let getCategoriesForStatistics: jest.Mock;
 
     beforeEach(async () => {
-        updateUser = jest.fn();
-        getUserByEmail = jest.fn();
-        getUserById = jest.fn();
+        getCategoriesForStatistics = jest.fn();
 
         const module: TestingModule = await Test.createTestingModule({
             providers: [
-                AuthService,
-                UserService,
-                JwtService,
+                BankService,
                 {
-                    provide: ConfigService,
-                    useValue: {
-                        get: jest.fn((key: string) => {
-                            switch (key) {
-                                case 'JWT_ACCESS_SECRET':
-                                    return 'somesecret';
-                                case 'JWT_REFRESH_SECRET':
-                                    return 'somesecretrefresh';
-                                default:
-                                    return null;
-                            }
-                        }),
-                    },
+                    provide: getRepositoryToken(Bank),
+                    useValue: mockBankRepository,
+                },
+                {
+                    provide: CategoryService,
+                    useValue: { getCategoriesForStatistics },
                 },
             ],
-        })
-            .overrideProvider(UserService)
-            .useValue({
-                updateUser,
-                getUserByEmail,
-                getUserById,
-                createUser,
-            })
-            .compile();
+        }).compile();
 
-        authService = module.get<AuthService>(AuthService);
+        bankService = module.get<BankService>(BankService);
     });
 
     it('should be defined', () => {
-        expect(authService).toBeDefined();
+        expect(bankService).toBeDefined();
     });
 
-    describe('register user', () => {
-        const userDto: CreateUserDto = {
-            email: 'wintersakura@gmail.com',
-            password: '123456',
+    describe('create bank', () => {
+        const user = {} as User;
+        const bankDto: BankDto = {
+            name: 'new bank',
         };
 
-        describe('when the user does not exist', () => {
+        it('should return new bank', async () => {
+            await expect(bankService.createBank(user, bankDto)).resolves.toEqual({} as Bank);
+            expect(mockBankRepository.create).toHaveBeenCalledWith({ ...bankDto, user });
+            expect(mockBankRepository.save).toHaveBeenCalledWith({} as Bank);
+        });
+    });
+
+    describe('get all banks', () => {
+        const user = {} as User;
+
+        beforeEach(() => {
+            mockBankRepository.find.mockReturnValue(Promise.resolve([] as Bank[]));
+        });
+
+        it('should return bank array', async () => {
+            await expect(bankService.getAllBanks(user)).resolves.toEqual([] as Bank[]);
+            expect(mockBankRepository.find).toHaveBeenCalled();
+        });
+    });
+
+    describe('get bank by id', () => {
+        const user = {} as User;
+        const bankId = 1;
+
+        describe('when bank exists', () => {
             beforeEach(() => {
-                updateUser.mockReturnValue(null);
-                getUserByEmail.mockReturnValue(Promise.resolve(null));
+                mockBankRepository.findOne.mockReturnValue(Promise.resolve({} as Bank));
             });
 
-            it('should return tokens', async () => {
-                expect(await authService.register(userDto)).toEqual({
-                    accessToken: expect.any(String),
-                    refreshToken: expect.any(String),
-                });
+            it('should return bank', async () => {
+                await expect(bankService.getBankById(user, bankId)).resolves.toEqual({} as Bank);
+                expect(mockBankRepository.findOne).toHaveBeenCalled();
             });
         });
 
-        describe('when the user exists', () => {
+        describe('when bank does not exist', () => {
             beforeEach(() => {
-                updateUser.mockReturnValue(null);
-                getUserByEmail.mockReturnValue({});
+                mockBankRepository.findOne.mockReturnValue(Promise.resolve(null));
             });
 
-            it('should throw UserAlreadyExistsException', async () => {
-                expect.assertions(3);
-
-                try {
-                    await authService.register(userDto);
-                } catch (e) {
-                    expect(e).toBeInstanceOf(UserAlreadyExistsException);
-                    expect(e).toHaveProperty('message', 'User with such email already exists');
-                    expect(e).toHaveProperty('status', 400);
-                }
+            it('should throw BankNotFoundException', async () => {
+                await expect(bankService.getBankById(user, bankId)).rejects.toThrow(BankNotFoundException);
+                expect(mockBankRepository.findOne).toHaveBeenCalled();
             });
         });
     });
 
-    describe('login user', () => {
-        const userDto: CreateUserDto = {
-            email: 'wintersakura@gmail.com',
-            password: '123456',
+    describe('update bank', () => {
+        const user = {} as User;
+        const bankId = 1;
+        const bankDto: BankDto = {
+            name: 'new bank name',
         };
 
-        describe('when the user exists', () => {
+        describe('when bank exists', () => {
             beforeEach(() => {
-                updateUser.mockReturnValue(null);
+                mockBankRepository.findOne.mockReturnValue(Promise.resolve({} as Bank));
             });
 
-            describe('and password match', () => {
-                beforeEach(async () => {
-                    const hash = await argon.hash('123456');
-                    getUserByEmail.mockReturnValue(Promise.resolve({ password: hash }));
-                });
-
-                it('should return tokens', async () => {
-                    expect(await authService.login(userDto)).toEqual({
-                        accessToken: expect.any(String),
-                        refreshToken: expect.any(String),
-                    });
-                });
-            });
-
-            describe('and password does not match', () => {
-                beforeEach(async () => {
-                    const hash = await argon.hash('123457');
-                    getUserByEmail.mockReturnValue(Promise.resolve({ password: hash }));
-                });
-
-                it('should throw WrongPasswordException', async () => {
-                    expect.assertions(3);
-
-                    try {
-                        await authService.login(userDto);
-                    } catch (e) {
-                        expect(e).toBeInstanceOf(WrongPasswordException);
-                        expect(e).toHaveProperty('message', 'Password does not match');
-                        expect(e).toHaveProperty('status', 400);
-                    }
-                });
+            it('should return bank', async () => {
+                await expect(bankService.updateBank(user, bankId, bankDto)).resolves.toEqual({} as Bank);
+                expect(mockBankRepository.update).toHaveBeenCalledWith(
+                    {
+                        id: bankId,
+                        user,
+                    },
+                    bankDto,
+                );
+                expect(mockBankRepository.findOne).toHaveBeenCalled();
             });
         });
 
-        describe('when the user does not exist', () => {
+        describe('when bank does not exist', () => {
             beforeEach(() => {
-                updateUser.mockReturnValue(null);
-                getUserByEmail.mockReturnValue(null);
+                mockBankRepository.findOne.mockReturnValue(Promise.resolve(null));
             });
 
-            it('should throw WrongEmailException', async () => {
-                expect.assertions(3);
-
-                try {
-                    await authService.login(userDto);
-                } catch (e) {
-                    expect(e).toBeInstanceOf(WrongEmailException);
-                    expect(e).toHaveProperty('message', 'User with such email not found');
-                    expect(e).toHaveProperty('status', 400);
-                }
+            it('should throw BankNotFoundException', async () => {
+                await expect(bankService.updateBank(user, bankId, bankDto)).rejects.toThrow(BankNotFoundException);
+                expect(mockBankRepository.update).toHaveBeenCalledWith(
+                    {
+                        id: bankId,
+                        user,
+                    },
+                    bankDto,
+                );
+                expect(mockBankRepository.findOne).toHaveBeenCalled();
             });
         });
     });
 
-    describe('refresh tokens', () => {
-        const userId = 1;
-        const refreshToken = 'token';
+    describe('delete bank', () => {
+        const user = {} as User;
+        const bankId = 1;
 
-        describe('when the user exists and has refresh token', () => {
+        describe('when bank exists', () => {
             beforeEach(() => {
-                updateUser.mockReturnValue(null);
+                mockBankRepository.findOne.mockReturnValue(Promise.resolve({} as Bank));
             });
 
-            describe('and refresh tokens match', () => {
-                beforeEach(async () => {
-                    const testToken = await argon.hash('token');
-                    getUserById.mockReturnValue(Promise.resolve({ refreshToken: testToken }));
-                });
-
-                it('should return tokens', async () => {
-                    expect(await authService.refreshTokens(userId, refreshToken)).toEqual({
-                        accessToken: expect.any(String),
-                        refreshToken: expect.any(String),
-                    });
-                });
-            });
-
-            describe('and refresh tokens does not match', () => {
-                beforeEach(async () => {
-                    const testToken = await argon.hash('token_not_match');
-                    getUserById.mockReturnValue(Promise.resolve({ refreshToken: testToken }));
-                });
-
-                it('should throw AccessDeniedException', async () => {
-                    expect.assertions(3);
-
-                    try {
-                        await authService.refreshTokens(userId, refreshToken);
-                    } catch (e) {
-                        expect(e).toBeInstanceOf(AccessDeniedException);
-                        expect(e).toHaveProperty('message', 'Access Denied');
-                        expect(e).toHaveProperty('status', 403);
-                    }
-                });
+            it('should call remove', async () => {
+                await bankService.deleteBank(user, bankId);
+                expect(mockBankRepository.findOne).toHaveBeenCalled();
+                expect(mockBankRepository.remove).toHaveBeenCalledWith({} as Bank);
+                expect(mockBankRepository.remove).toHaveReturnedWith(Promise.resolve(Bank));
             });
         });
 
-        describe('when the user does not exist or does not have refresh token', () => {
+        describe('when bank does not exist', () => {
             beforeEach(() => {
-                updateUser.mockReturnValue(null);
-                getUserById.mockReturnValue(null);
+                mockBankRepository.findOne.mockReturnValue(Promise.resolve(null));
             });
 
-            it('should throw AccessDeniedException', async () => {
-                expect.assertions(3);
+            it('should throw BankNotFoundException', async () => {
+                await expect(bankService.deleteBank(user, bankId)).rejects.toThrow(BankNotFoundException);
+                expect(mockBankRepository.findOne).toHaveBeenCalled();
+                expect(mockBankRepository.remove).toHaveBeenCalledWith(null);
+            });
+        });
+    });
 
-                try {
-                    await authService.refreshTokens(userId, refreshToken);
-                } catch (e) {
-                    expect(e).toBeInstanceOf(AccessDeniedException);
-                    expect(e).toHaveProperty('message', 'Access Denied');
-                    expect(e).toHaveProperty('status', 403);
-                }
+    describe('get bank statistics', () => {
+        const user = {} as User;
+        const bankId = 1;
+        const bankStatisticsDto: BankStatisticsDto = {
+            categoryIds: [1, 2],
+            fromPeriod: new Date(),
+            toPeriod: new Date(),
+        };
+
+        describe('when categories array not empty', () => {
+            // input data
+            const transactionProfit = {
+                type: TransactionType.PROFITABLE,
+                amount: 1,
+            } as Transaction;
+            const transactionConsume = {
+                type: TransactionType.CONSUMABLE,
+                amount: 1,
+            } as Transaction;
+            const categorySalary = {
+                name: 'salary',
+                transactions: [transactionProfit],
+            } as Category;
+            const categoryFood = {
+                name: 'food',
+                transactions: [transactionConsume],
+            } as Category;
+
+            beforeEach(() => {
+                getCategoriesForStatistics.mockReturnValue(
+                    Promise.resolve([categorySalary, categoryFood] as Category[]),
+                );
+            });
+
+            it('should return statistics array', async () => {
+                await expect(bankService.getBankStatistics(user, bankId, bankStatisticsDto)).resolves.toEqual([
+                    { salary: 1 },
+                    { food: -1 },
+                ]);
+                expect(getCategoriesForStatistics).toHaveBeenCalledWith(user, bankId, bankStatisticsDto);
+                expect(getCategoriesForStatistics).toHaveReturnedWith(
+                    Promise.resolve([categorySalary, categoryFood] as Category[]),
+                );
+            });
+        });
+
+        describe('when categories array empty', () => {
+            beforeEach(() => {
+                getCategoriesForStatistics.mockReturnValue(Promise.resolve([] as Category[]));
+            });
+
+            it('should return empty array', async () => {
+                await expect(bankService.getBankStatistics(user, bankId, bankStatisticsDto)).resolves.toEqual([]);
+                expect(getCategoriesForStatistics).toHaveBeenCalledWith(user, bankId, bankStatisticsDto);
+                expect(getCategoriesForStatistics).toHaveReturnedWith(Promise.resolve([] as Category[]));
             });
         });
     });

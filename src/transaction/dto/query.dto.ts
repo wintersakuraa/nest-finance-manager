@@ -1,20 +1,17 @@
-import { ArrayNotEmpty, IsEnum, IsNotEmpty, IsNumber, IsPositive } from 'class-validator';
-import { TransactionType } from '../transaction.entity';
+import { IsInt, IsOptional } from 'class-validator';
+import { Type } from 'class-transformer';
+import { ApiProperty } from '@nestjs/swagger';
 
-export class TransactionDto {
-    @IsPositive()
-    @IsNotEmpty()
-    @IsNumber({ maxDecimalPlaces: 2 })
-    amount: string;
+export class QueryDto {
+    @ApiProperty({ minimum: 0, default: 0, type: Number, required: false })
+    @Type(() => Number)
+    @IsInt({ message: 'skip parameter should be an integer' })
+    @IsOptional()
+    skip?: number;
 
-    @IsNotEmpty()
-    @IsEnum(TransactionType)
-    type: TransactionType;
-
-    @IsNotEmpty()
-    bankId: number;
-
-    @ArrayNotEmpty()
-    @IsNumber({}, { each: true })
-    categoryIds: number[];
+    @ApiProperty({ type: Number, minimum: 0, required: false })
+    @Type(() => Number)
+    @IsInt({ message: 'take parameter should be an integer' })
+    @IsOptional()
+    take?: number;
 }
