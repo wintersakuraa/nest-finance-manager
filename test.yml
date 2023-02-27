@@ -1,0 +1,33 @@
+version: "3.8"
+services:
+  api:
+    container_name: api
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: ${TARGET}
+    ports:
+      - ${API_PORT}:${API_PORT}
+    volumes:
+      - ./src:/usr/src/app/src
+      - /usr/src/app/node_modules
+    depends_on:
+      - db
+    networks:
+      - nestjs-network
+
+  db:
+    container_name: db
+    image: postgres
+    restart: always
+    ports:
+      - ${POSTGRES_PORT}:5432
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+    networks:
+      - nestjs-network
+
+networks:
+  nestjs-network:
