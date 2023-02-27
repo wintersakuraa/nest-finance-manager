@@ -355,7 +355,7 @@ Update Category
 
 Delete Category
 
-### GET: /api/bank/1/transaction
+### GET: /api/bank/:bankId/transaction
 
 Get All Transactions
 
@@ -404,7 +404,7 @@ Get All Transactions
 ]
 ```
 
-### DELETE: /api/bank/1/transaction
+### DELETE: /api/bank/:bankId/transaction/:transactionId
 
 Delete Transaction
 
